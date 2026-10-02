@@ -1,21 +1,29 @@
-use anyhow::Result;
-use console::{style, measure_text_width, strip_ansi_codes};
-use crate::presentation::cli::hop::app::{HopApp, SelectModal, InputModal};
+use crate::presentation::cli::hop::app::{HopApp, InputModal, SelectModal};
 use crate::presentation::tui::utils;
 use crate::presentation::ui::modal::SelectionModal;
+use anyhow::Result;
+use console::{measure_text_width, strip_ansi_codes, style};
 
 pub fn render(app: &HopApp) -> Result<()> {
     let term = &app.term;
     let (height, width) = term.size();
-    let left_width = 30; 
-    let right_width = (width as usize).saturating_sub(left_width).saturating_sub(3); // 3 for separators
-    
+    let left_width = 30;
+    let right_width = (width as usize)
+        .saturating_sub(left_width)
+        .saturating_sub(3); // 3 for separators
+
     // ヘッダー表示
     term.move_cursor_to(0, 0)?;
     term.clear_screen()?;
-    
-    term.write_line(&format!("{}", style("----- USAGI TERMINAL -----").magenta().bold()))?;
-    term.write_line(&format!("MODE: {}", style(app.mode().label()).bold().cyan()))?;
+
+    term.write_line(&format!(
+        "{}",
+        style("----- USAGI TERMINAL -----").magenta().bold()
+    ))?;
+    term.write_line(&format!(
+        "MODE: {}",
+        style(app.mode().label()).bold().cyan()
+    ))?;
 
     // 左右分割描画
     for i in 0..(height as usize - 6) {
@@ -30,25 +38,35 @@ pub fn render(app: &HopApp) -> Result<()> {
                 if !is_second_line {
                     let mark_char = "●";
                     let mark_width = measure_text_width(mark_char);
-                    let cursor = if wt_idx == app.selected_index && !app.is_command_mode { ">" } else { " " };
+                    let cursor = if wt_idx == app.selected_index && !app.is_command_mode {
+                        ">"
+                    } else {
+                        " "
+                    };
                     let is_selected = wt_idx == app.selected_index;
                     let mark = if is_selected {
                         style(mark_char).green().to_string()
                     } else {
                         " ".repeat(mark_width)
                     };
-                    
+
                     let status_icon = match wt.status {
-                        crate::domain::project::SessionStatus::Todo => style(wt.status.icon()).dim().to_string(),
-                        crate::domain::project::SessionStatus::Running => style(wt.status.icon()).green().bold().to_string(),
-                        crate::domain::project::SessionStatus::Done => style(wt.status.icon()).blue().bold().to_string(),
+                        crate::domain::project::SessionStatus::Todo => {
+                            style(wt.status.icon()).dim().to_string()
+                        }
+                        crate::domain::project::SessionStatus::Running => {
+                            style(wt.status.icon()).green().bold().to_string()
+                        }
+                        crate::domain::project::SessionStatus::Done => {
+                            style(wt.status.icon()).blue().bold().to_string()
+                        }
                     };
                     let upstream_icon = if wt.has_upstream {
                         style(" 󰄵").cyan().to_string()
                     } else {
                         "".to_string()
                     };
-                    
+
                     let exists = app.project_path.join(&wt.directory).exists();
                     let branch_text = if exists {
                         wt.branch.clone()
@@ -57,12 +75,33 @@ pub fn render(app: &HopApp) -> Result<()> {
                     };
 
                     if wt_idx == app.selected_index {
-                        format!("{} {}  {}{}  {}", cursor, mark, style(&branch_text).cyan().bold(), upstream_icon, status_icon)
+                        format!(
+                            "{} {}  {}{}  {}",
+                            cursor,
+                            mark,
+                            style(&branch_text).cyan().bold(),
+                            upstream_icon,
+                            status_icon
+                        )
                     } else {
-                        format!("{} {}  {}{}  {}", cursor, mark, if exists { branch_text } else { style(&branch_text).dim().to_string() }, upstream_icon, status_icon)
+                        format!(
+                            "{} {}  {}{}  {}",
+                            cursor,
+                            mark,
+                            if exists {
+                                branch_text
+                            } else {
+                                style(&branch_text).dim().to_string()
+                            },
+                            upstream_icon,
+                            status_icon
+                        )
                     }
                 } else {
-                    format!("   {}", style(utils::format_modified_at(&wt.modified_at)).dim())
+                    format!(
+                        "   {}",
+                        style(utils::format_modified_at(&wt.modified_at)).dim()
+                    )
                 }
             } else {
                 "".to_string()
@@ -72,7 +111,7 @@ pub fn render(app: &HopApp) -> Result<()> {
         // 左側の幅を調整
         let left_padding = left_width.saturating_sub(measure_text_width(&left_content));
         let left_display = format!("{}{}", left_content, " ".repeat(left_padding));
-        
+
         // 右側の表示内容 (履歴)
         let right_content = if i == 0 {
             if let Some(cmd) = &app.active_interaction {
@@ -94,8 +133,9 @@ pub fn render(app: &HopApp) -> Result<()> {
                 "".to_string()
             }
         };
-        
-        let right_padding = right_width.saturating_sub(measure_text_width(&strip_ansi_codes(&right_content)));
+
+        let right_padding =
+            right_width.saturating_sub(measure_text_width(&strip_ansi_codes(&right_content)));
         let right_display = format!("{}{}", right_content, " ".repeat(right_padding));
 
         term.write_line(&format!("{} | {}", left_display, right_display))?;
@@ -110,16 +150,26 @@ pub fn render(app: &HopApp) -> Result<()> {
     } else {
         "|"
     };
-    let command_prompt = format!("COMMAND{:padding$} {} {}", "", prompt_prefix, app.current_input, padding = command_padding);
+    let command_prompt = format!(
+        "COMMAND{:padding$} {} {}",
+        "",
+        prompt_prefix,
+        app.current_input,
+        padding = command_padding
+    );
     let command_display = format!("{:width$}", command_prompt, width = width as usize);
     term.write_line(&command_display)?;
 
     // 下部ヘルプ
     term.move_cursor_to(0, (height as usize).saturating_sub(1))?;
     let help_text = if app.is_command_mode {
-        style("Enter: execute, Escape: cancel, Tab: select suggestion, Type to command...").dim().to_string()
+        style("Enter: execute, Escape: cancel, Tab: select suggestion, Type to command...")
+            .dim()
+            .to_string()
     } else {
-        style("Use Up/Down to select, Enter to type command, 'q' to quit.").dim().to_string()
+        style("Use Up/Down to select, Enter to type command, 'q' to quit.")
+            .dim()
+            .to_string()
     };
     // 最終行でのスクロールを避けるため write_str を使用
     let help_display = format!("{:width$}", help_text, width = width as usize);
@@ -156,9 +206,15 @@ pub fn render(app: &HopApp) -> Result<()> {
     Ok(())
 }
 
-fn render_command_popup(app: &HopApp, height: usize, width: usize, left_width: usize) -> Result<()> {
+fn render_command_popup(
+    app: &HopApp,
+    height: usize,
+    width: usize,
+    left_width: usize,
+) -> Result<()> {
     let term = &app.term;
-    let (usage_text, suggestions) = crate::presentation::cli::hop::completion::compute_suggestions(app);
+    let (usage_text, suggestions) =
+        crate::presentation::cli::hop::completion::compute_suggestions(app);
 
     let mut offset = 5;
     let popup_x = left_width + 3; // | の右側
@@ -178,11 +234,16 @@ fn render_command_popup(app: &HopApp, height: usize, width: usize, left_width: u
     if !suggestions.is_empty() && usage_text.is_none() {
         let max_suggestions = 10;
         let display_count = suggestions.len().min(max_suggestions);
-        
+
         for (idx, (name, desc)) in suggestions.iter().take(display_count).enumerate() {
             let y = height.saturating_sub(offset + (display_count - 1 - idx));
             term.move_cursor_to(popup_x, y)?;
-            let content = format!("{:<10} | {:<width$}", name, desc, width = popup_width.saturating_sub(13));
+            let content = format!(
+                "{:<10} | {:<width$}",
+                name,
+                desc,
+                width = popup_width.saturating_sub(13)
+            );
             if app.suggestion_index == Some(idx) {
                 term.write_str(&style(content).black().on_cyan().to_string())?;
             } else {
@@ -194,48 +255,28 @@ fn render_command_popup(app: &HopApp, height: usize, width: usize, left_width: u
     Ok(())
 }
 
-fn render_generic_modal(app: &HopApp, modal: &SelectModal, height: usize, width: usize, left_width: usize) -> Result<()> {
-    let modal_ui = SelectionModal::new(
-        &modal.title,
-        &modal.items,
-        modal.selected_index,
-    );
+fn render_generic_modal(
+    app: &HopApp,
+    modal: &SelectModal,
+    height: usize,
+    width: usize,
+    left_width: usize,
+) -> Result<()> {
+    let modal_ui = SelectionModal::new(&modal.title, &modal.items, modal.selected_index);
     modal_ui.render(&app.term, height, width, left_width)
 }
 
-fn render_input_modal(app: &HopApp, modal: &InputModal, height: usize, width: usize, left_width: usize) -> Result<()> {
-    let term = &app.term;
-    let popup_x = left_width + 4;
-    let popup_width = width.saturating_sub(popup_x).saturating_sub(2);
-
-    let box_height = 4;
-    let offset = 4 + box_height;
-
-    // 上枠
-    term.move_cursor_to(popup_x, height.saturating_sub(offset))?;
-    term.write_str(&style(format!("┌{:─<width$}┐", "", width = popup_width)).cyan().to_string())?;
-    
-    // タイトル
-    term.move_cursor_to(popup_x, height.saturating_sub(offset - 1))?;
-    let title_content = format!("? {}", modal.title);
-    let title_line = format!("│ {:<width$} │", title_content, width = popup_width.saturating_sub(2));
-    term.write_str(&style(title_line).cyan().bold().to_string())?;
-
-    // 入力値
-    term.move_cursor_to(popup_x, height.saturating_sub(offset - 2))?;
-    let input_prefix = "> ";
-    let input_line = format!("│ {}{:<width$} │", input_prefix, modal.value, width = popup_width.saturating_sub(2 + measure_text_width(input_prefix)));
-    term.write_str(&style(input_line).white().to_string())?;
-
-    // 下枠
-    term.move_cursor_to(popup_x, height.saturating_sub(offset - 3))?;
-    term.write_str(&style(format!("└{:─<width$}┘", "", width = popup_width)).cyan().to_string())?;
-
-    // カーソル位置を計算して移動
-    let prefix_width = measure_text_width("│ ") + measure_text_width(input_prefix);
-    let cursor_x = popup_x + prefix_width + measure_text_width(&modal.value);
-    term.move_cursor_to(cursor_x, height.saturating_sub(offset - 2))?;
-    term.show_cursor()?;
-
-    Ok(())
+fn render_input_modal(
+    app: &HopApp,
+    modal: &InputModal,
+    height: usize,
+    width: usize,
+    left_width: usize,
+) -> Result<()> {
+    crate::presentation::ui::modal::InputModal::new(
+        &modal.title,
+        &modal.value,
+        modal.value.chars().count(),
+    )
+    .render(&app.term, height, width, left_width)
 }
